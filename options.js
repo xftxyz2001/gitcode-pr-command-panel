@@ -17,6 +17,8 @@
   let draggedRow = null;
   let savedSnapshot = "";
   let hasUnsavedChanges = false;
+  let saving = false;
+  let saveFeedbackTimer = null;
 
   function cloneDefaults() {
     return window.GITCODE_PR_DEFAULT_COMMANDS.map((item) => ({ ...item }));
@@ -43,6 +45,21 @@
     hasUnsavedChanges = snapshot(readCommands()) !== savedSnapshot;
     status.textContent = hasUnsavedChanges ? "有未保存的修改" : "当前配置已保存";
     status.dataset.kind = hasUnsavedChanges ? "info" : "success";
+    if (!saving) resetSaveButtonFeedback();
+  }
+
+  function resetSaveButtonFeedback() {
+    clearTimeout(saveFeedbackTimer);
+    saveFeedbackTimer = null;
+    saveButton.textContent = "保存配置";
+    delete saveButton.dataset.state;
+  }
+
+  function showTemporarySaveFeedback(label, state) {
+    clearTimeout(saveFeedbackTimer);
+    saveButton.textContent = label;
+    saveButton.dataset.state = state;
+    saveFeedbackTimer = setTimeout(resetSaveButtonFeedback, 2000);
   }
 
   function requestConfirmation({ title, message, confirmLabel }) {
@@ -172,16 +189,29 @@
   }
 
   async function save() {
+    if (saving) return;
+    saving = true;
+    clearTimeout(saveFeedbackTimer);
+    saveButton.disabled = true;
+    saveButton.textContent = "保存中…";
+    saveButton.dataset.state = "saving";
     try {
       const commands = readCommands(true);
       await storageArea.set({ commands });
       savedSnapshot = snapshot(commands);
-      hasUnsavedChanges = false;
-      status.textContent = `已保存，共显示 ${commands.filter((item) => item.enabled).length} 个按钮`;
-      status.dataset.kind = "success";
+      hasUnsavedChanges = snapshot(readCommands()) !== savedSnapshot;
+      status.textContent = hasUnsavedChanges
+        ? "已保存点击时的配置，但仍有新的未保存修改"
+        : `已保存，共显示 ${commands.filter((item) => item.enabled).length} 个按钮`;
+      status.dataset.kind = hasUnsavedChanges ? "info" : "success";
+      showTemporarySaveFeedback("✓ 已保存", "success");
     } catch (error) {
       status.textContent = error instanceof Error ? error.message : "保存失败";
       status.dataset.kind = "error";
+      showTemporarySaveFeedback("保存失败", "error");
+    } finally {
+      saving = false;
+      saveButton.disabled = false;
     }
   }
 

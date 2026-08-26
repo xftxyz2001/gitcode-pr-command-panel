@@ -71,6 +71,9 @@ h1 {
 
 .button.primary { background: #2f6fed; color: #fff; }
 .button.primary:hover { background: #245bcb; }
+.button.primary:disabled { cursor: wait; opacity: 0.72; }
+.button.primary[data-state="success"] { background: #079455; }
+.button.primary[data-state="error"] { background: #d92d20; }
 .button.secondary { border: 1px solid #d0d5dd; background: #fff; color: #344054; }
 .button.secondary:hover { background: #f9fafb; }
 .button.danger { background: #d92d20; color: #fff; }
