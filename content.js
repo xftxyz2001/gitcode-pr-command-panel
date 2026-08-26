@@ -5,21 +5,41 @@
   const PR_PATH_RE = /^\/[^/]+\/[^/]+\/pull\/\d+(?:\/|$)/;
   const REQUEST_EVENT = "gitcode-pr-command:send";
   const RESULT_EVENT = "gitcode-pr-command:result";
-  const COMMANDS = [
-    { label: "编译", command: "compile" },
-    { label: "查看日志", command: "get-log" },
-    { label: "重试流水线", command: "retry" },
-    { label: "停止流水线", command: "stop" },
-    { label: "检查 CLA", command: "/check-cla" },
-    { label: "LGTM", command: "/lgtm" },
-    { label: "批准合入", command: "/approve" },
-    { label: "检查合入", command: "/check-pr" }
-  ];
+  const CONFIG_EVENT = "gitcode-pr-command:config";
 
   let lastUrl = location.href;
+  let commands = [];
   let sending = false;
   let lastSentCommand = "";
   let lastSentAt = 0;
+
+  function cloneDefaults() {
+    return window.GITCODE_PR_DEFAULT_COMMANDS.map((item) => ({ ...item }));
+  }
+
+  function normalizeCommands(value) {
+    if (!Array.isArray(value)) return cloneDefaults();
+    const normalized = value
+      .filter((item) => item && typeof item === "object")
+      .map((item, index) => ({
+        id: String(item.id || `custom-${index}-${Date.now()}`),
+        label: String(item.label || "未命名").trim().slice(0, 30),
+        command: String(item.command || "").trim().slice(0, 65535),
+        enabled: Boolean(item.enabled)
+      }))
+      .filter((item) => item.command);
+    return normalized;
+  }
+
+  function visibleCommands() {
+    return commands.filter((item) => item.enabled && item.label && item.command);
+  }
+
+  function publishAllowedCommands() {
+    document.dispatchEvent(new CustomEvent(CONFIG_EVENT, {
+      detail: JSON.stringify(visibleCommands().map((item) => item.command))
+    }));
+  }
 
   function isPrPage() {
     return location.hostname === "gitcode.com" && PR_PATH_RE.test(location.pathname);
@@ -40,7 +60,6 @@
 
   function requestDirectComment(command) {
     const requestId = crypto.randomUUID();
-
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         document.removeEventListener(RESULT_EVENT, onResult);
@@ -55,7 +74,6 @@
           return;
         }
         if (result.requestId !== requestId) return;
-
         clearTimeout(timeout);
         document.removeEventListener(RESULT_EVENT, onResult);
         if (result.ok) resolve(result);
@@ -79,7 +97,6 @@
     sending = true;
     setButtonsDisabled(true);
     setStatus(`正在直接发送 ${command}…`);
-
     try {
       await requestDirectComment(command);
       lastSentCommand = command;
@@ -93,6 +110,30 @@
     }
   }
 
+  function renderButtons() {
+    const grid = document.querySelector(`#${PANEL_ID} .gc-command-grid`);
+    if (!grid) return;
+    grid.replaceChildren();
+    const items = visibleCommands();
+
+    for (const { label, command } of items) {
+      const button = document.createElement("button");
+      button.className = "gc-command-button";
+      button.type = "button";
+      button.textContent = label;
+      button.title = `直接发送评论：${command}`;
+      button.addEventListener("click", () => sendCommand(command));
+      grid.appendChild(button);
+    }
+
+    if (!items.length) {
+      const empty = document.createElement("div");
+      empty.className = "gc-command-empty";
+      empty.textContent = "尚未勾选命令，请打开设置";
+      grid.appendChild(empty);
+    }
+  }
+
   function createPanel() {
     if (document.getElementById(PANEL_ID) || !isPrPage()) return;
 
@@ -102,7 +143,6 @@
 
     const header = document.createElement("div");
     header.className = "gc-command-header";
-
     const title = document.createElement("div");
     title.className = "gc-command-title";
     title.textContent = "PR 快捷命令";
@@ -134,8 +174,18 @@
     header.addEventListener("pointerup", stopDragging);
     header.addEventListener("pointercancel", stopDragging);
 
+    const actions = document.createElement("div");
+    actions.className = "gc-command-actions";
+    const settings = document.createElement("button");
+    settings.className = "gc-command-icon-button";
+    settings.type = "button";
+    settings.title = "配置快捷命令";
+    settings.setAttribute("aria-label", "配置快捷命令");
+    settings.textContent = "⚙";
+    settings.addEventListener("click", () => chrome.runtime.openOptionsPage());
+
     const toggle = document.createElement("button");
-    toggle.className = "gc-command-toggle";
+    toggle.className = "gc-command-icon-button gc-command-toggle";
     toggle.type = "button";
     toggle.title = "收起";
     toggle.setAttribute("aria-label", "收起快捷命令");
@@ -146,20 +196,11 @@
       toggle.title = collapsed ? "展开" : "收起";
       toggle.setAttribute("aria-label", collapsed ? "展开快捷命令" : "收起快捷命令");
     });
-    header.append(title, toggle);
+    actions.append(settings, toggle);
+    header.append(title, actions);
 
     const grid = document.createElement("div");
     grid.className = "gc-command-grid";
-    COMMANDS.forEach(({ label, command }) => {
-      const button = document.createElement("button");
-      button.className = "gc-command-button";
-      button.type = "button";
-      button.textContent = label;
-      button.title = `直接发送评论：${command}`;
-      button.addEventListener("click", () => sendCommand(command));
-      grid.appendChild(button);
-    });
-
     const status = document.createElement("div");
     status.className = "gc-command-status";
     status.setAttribute("role", "status");
@@ -168,12 +209,14 @@
 
     panel.append(header, grid, status);
     document.body.appendChild(panel);
+    renderButtons();
   }
 
   function syncPanel() {
     const panel = document.getElementById(PANEL_ID);
     if (isPrPage()) {
       if (!panel) createPanel();
+      else renderButtons();
     } else if (panel) {
       panel.remove();
     }
@@ -185,8 +228,19 @@
       syncPanel();
     }
   });
-
   observer.observe(document.documentElement, { childList: true, subtree: true });
   window.addEventListener("popstate", syncPanel);
-  syncPanel();
+
+  chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName !== "local" || !changes.commands) return;
+    commands = normalizeCommands(changes.commands.newValue);
+    publishAllowedCommands();
+    syncPanel();
+  });
+
+  chrome.storage.local.get("commands").then(({ commands: saved }) => {
+    commands = normalizeCommands(saved);
+    publishAllowedCommands();
+    syncPanel();
+  });
 })();

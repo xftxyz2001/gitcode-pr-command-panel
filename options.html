@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GitCode PR 快捷命令设置</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <main class="page-shell">
+    <header class="page-header">
+      <div>
+        <p class="eyebrow">GitCode PR 快捷命令</p>
+        <h1>配置悬浮按钮</h1>
+        <p class="intro">勾选需要显示的命令，修改按钮名称和发送内容，并通过拖动或箭头调整顺序。</p>
+      </div>
+      <div class="header-actions">
+        <button id="reset-button" class="button secondary" type="button">恢复默认</button>
+        <button id="save-button" class="button primary" type="button">保存配置</button>
+      </div>
+    </header>
+
+    <section class="summary-card" aria-label="默认配置说明">
+      <div>
+        <strong>默认显示</strong>
+        <span>compile、get-log、/lgtm、/approve</span>
+      </div>
+      <p>默认命令来自 Ascend 社区机器人使用指南；参数化命令使用指南中的示例值，启用前请按仓库实际标签修改。</p>
+    </section>
+
+    <section class="commands-card">
+      <div class="table-head" aria-hidden="true">
+        <span>显示</span>
+        <span>按钮名称</span>
+        <span>发送内容</span>
+        <span>顺序</span>
+        <span></span>
+      </div>
+      <div id="command-list" class="command-list"></div>
+      <button id="add-button" class="add-button" type="button">＋ 添加其他命令</button>
+    </section>
+
+    <footer class="page-footer">
+      <span id="save-status" role="status" aria-live="polite">修改后请保存</span>
+      <a href="https://gitcode.com/Ascend/infrastructure/blob/master/docs/robot/robot%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97.md" target="_blank" rel="noreferrer">查看机器人命令指南</a>
+    </footer>
+  </main>
+
+  <template id="command-row-template">
+    <article class="command-row" draggable="true">
+      <label class="toggle-wrap">
+        <input class="enabled-input" type="checkbox">
+        <span class="toggle-ui" aria-hidden="true"></span>
+        <span class="sr-only">显示此命令</span>
+      </label>
+      <label>
+        <span class="mobile-label">按钮名称</span>
+        <input class="label-input text-input" type="text" maxlength="30" placeholder="例如：编译">
+      </label>
+      <label>
+        <span class="mobile-label">发送内容</span>
+        <input class="command-input text-input code-input" type="text" maxlength="65535" placeholder="例如：compile">
+      </label>
+      <div class="order-actions">
+        <button class="icon-button move-up" type="button" title="上移" aria-label="上移">↑</button>
+        <button class="icon-button move-down" type="button" title="下移" aria-label="下移">↓</button>
+        <button class="drag-handle" type="button" title="拖动排序" aria-label="拖动排序">⋮⋮</button>
+      </div>
+      <button class="icon-button delete-button" type="button" title="删除" aria-label="删除">×</button>
+    </article>
+  </template>
+
+  <script src="defaults.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>

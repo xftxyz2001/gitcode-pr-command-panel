@@ -3,16 +3,8 @@
 
   const REQUEST_EVENT = "gitcode-pr-command:send";
   const RESULT_EVENT = "gitcode-pr-command:result";
-  const ALLOWED_COMMANDS = new Set([
-    "compile",
-    "get-log",
-    "retry",
-    "stop",
-    "/check-cla",
-    "/lgtm",
-    "/approve",
-    "/check-pr"
-  ]);
+  const CONFIG_EVENT = "gitcode-pr-command:config";
+  let allowedCommands = new Set();
 
   function reply(result) {
     document.dispatchEvent(new CustomEvent(RESULT_EVENT, {
@@ -93,7 +85,7 @@
   }
 
   async function sendComment(command) {
-    if (!ALLOWED_COMMANDS.has(command)) throw new Error("该命令不在插件允许列表中");
+    if (!allowedCommands.has(command)) throw new Error("该命令不在当前插件配置中");
 
     const { pathWithNamespace, iid } = getPrContext();
     const headers = getRequestHeaders();
@@ -109,6 +101,21 @@
     );
     return parseResponse(response);
   }
+
+  document.addEventListener(CONFIG_EVENT, (event) => {
+    try {
+      const values = JSON.parse(event.detail);
+      if (!Array.isArray(values)) return;
+      allowedCommands = new Set(
+        values
+          .filter((value) => typeof value === "string")
+          .map((value) => value.trim())
+          .filter((value) => value && value.length <= 65535)
+      );
+    } catch {
+      allowedCommands = new Set();
+    }
+  });
 
   document.addEventListener(REQUEST_EVENT, async (event) => {
     let request;

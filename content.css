@@ -47,7 +47,13 @@
   line-height: 1.4;
 }
 
-#gitcode-pr-command-panel .gc-command-toggle {
+#gitcode-pr-command-panel .gc-command-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+#gitcode-pr-command-panel .gc-command-icon-button {
   width: 28px;
   height: 28px;
   padding: 0;
@@ -59,9 +65,18 @@
   font-size: 16px;
 }
 
-#gitcode-pr-command-panel .gc-command-toggle:hover {
+#gitcode-pr-command-panel .gc-command-icon-button:hover {
   background: #f2f4f7;
   color: var(--gc-panel-text);
+}
+
+#gitcode-pr-command-panel .gc-command-empty {
+  grid-column: 1 / -1;
+  padding: 10px 6px;
+  color: var(--gc-panel-muted);
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: center;
 }
 
 #gitcode-pr-command-panel .gc-command-grid {
