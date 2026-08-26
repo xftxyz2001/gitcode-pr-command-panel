@@ -94,5 +94,10 @@
 - 默认仅显示 `compile`、`get-log`、`/lgtm`、`/approve`。
 - 页面桥接仅接受当前配置中存在的发送内容。
 
+## v1.3.1 设置按钮修复
+
+- 不再从 GitCode 页面内容脚本直接调用部分浏览器未提供的 `chrome.runtime.openOptionsPage()`。
+- 点击齿轮后由扩展后台创建配置页标签，并在失败时于悬浮面板显示错误信息。
+
 - `/lgtm`、`/approve` 等命令是否生效取决于当前 GitCode 账号的仓库角色。
 - 插件仅注入 GitCode 页面，只申请用于保存命令配置的 `storage` 权限，不申请浏览历史、下载等权限。

@@ -4,6 +4,7 @@ import vm from "node:vm";
 
 const defaultsCode = fs.readFileSync(new URL("../defaults.js", import.meta.url), "utf8");
 const bridgeCode = fs.readFileSync(new URL("../page-bridge.js", import.meta.url), "utf8");
+const backgroundCode = fs.readFileSync(new URL("../background.js", import.meta.url), "utf8");
 
 const defaultsContext = { window: {} };
 vm.runInNewContext(defaultsCode, defaultsContext);
@@ -82,5 +83,25 @@ const rejectedResult = await rejected;
 assert.equal(rejectedResult.ok, false);
 assert.match(rejectedResult.message, /当前插件配置/);
 assert.equal(requests.length, 1);
+
+let messageListener = null;
+const openedTabs = [];
+const backgroundContext = {
+  chrome: {
+    runtime: {
+      getURL: (path) => `chrome-extension://test-extension/${path}`,
+      onMessage: { addListener: (listener) => { messageListener = listener; } }
+    },
+    tabs: { create: async (options) => { openedTabs.push(options); } }
+  },
+  Error
+};
+vm.runInNewContext(backgroundCode, backgroundContext);
+assert.equal(typeof messageListener, "function");
+const openResult = new Promise((resolve) => {
+  assert.equal(messageListener({ type: "open-options" }, {}, resolve), true);
+});
+assert.deepEqual(JSON.parse(JSON.stringify(await openResult)), { ok: true });
+assert.deepEqual(JSON.parse(JSON.stringify(openedTabs)), [{ url: "chrome-extension://test-extension/options.html" }]);
 
 console.log("Smoke tests passed");

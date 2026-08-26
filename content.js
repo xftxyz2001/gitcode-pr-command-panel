@@ -182,7 +182,16 @@
     settings.title = "配置快捷命令";
     settings.setAttribute("aria-label", "配置快捷命令");
     settings.textContent = "⚙";
-    settings.addEventListener("click", () => chrome.runtime.openOptionsPage());
+    settings.addEventListener("click", async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      try {
+        const response = await chrome.runtime.sendMessage({ type: "open-options" });
+        if (!response?.ok) throw new Error(response?.message || "配置页打开失败");
+      } catch (error) {
+        setStatus(error instanceof Error ? error.message : "配置页打开失败", "error");
+      }
+    });
 
     const toggle = document.createElement("button");
     toggle.className = "gc-command-icon-button gc-command-toggle";
