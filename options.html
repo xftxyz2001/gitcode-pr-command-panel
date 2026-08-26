@@ -46,6 +46,20 @@
     </footer>
   </main>
 
+  <dialog id="confirm-dialog" class="confirm-dialog" aria-labelledby="confirm-title" aria-describedby="confirm-message">
+    <form method="dialog" class="confirm-card">
+      <div class="confirm-icon" aria-hidden="true">!</div>
+      <div class="confirm-content">
+        <h2 id="confirm-title">确认操作</h2>
+        <p id="confirm-message"></p>
+      </div>
+      <div class="confirm-actions">
+        <button class="button secondary" type="submit" value="cancel">取消</button>
+        <button id="confirm-action-button" class="button danger" type="submit" value="confirm">确认</button>
+      </div>
+    </form>
+  </dialog>
+
   <template id="command-row-template">
     <article class="command-row" draggable="true">
       <label class="toggle-wrap">

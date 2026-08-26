@@ -7,10 +7,16 @@
   const resetButton = document.querySelector("#reset-button");
   const addButton = document.querySelector("#add-button");
   const status = document.querySelector("#save-status");
+  const confirmDialog = document.querySelector("#confirm-dialog");
+  const confirmTitle = document.querySelector("#confirm-title");
+  const confirmMessage = document.querySelector("#confirm-message");
+  const confirmActionButton = document.querySelector("#confirm-action-button");
   const storageArea = typeof chrome !== "undefined" && chrome.storage?.local
     ? chrome.storage.local
     : { get: async () => ({}), set: async () => {} };
   let draggedRow = null;
+  let savedSnapshot = "";
+  let hasUnsavedChanges = false;
 
   function cloneDefaults() {
     return window.GITCODE_PR_DEFAULT_COMMANDS.map((item) => ({ ...item }));
@@ -29,9 +35,29 @@
     return normalized;
   }
 
-  function markDirty() {
-    status.textContent = "有未保存的修改";
-    status.dataset.kind = "info";
+  function snapshot(commands) {
+    return JSON.stringify(commands);
+  }
+
+  function updateDirtyState() {
+    hasUnsavedChanges = snapshot(readCommands()) !== savedSnapshot;
+    status.textContent = hasUnsavedChanges ? "有未保存的修改" : "当前配置已保存";
+    status.dataset.kind = hasUnsavedChanges ? "info" : "success";
+  }
+
+  function requestConfirmation({ title, message, confirmLabel }) {
+    confirmTitle.textContent = title;
+    confirmMessage.textContent = message;
+    confirmActionButton.textContent = confirmLabel;
+    confirmDialog.returnValue = "cancel";
+    confirmDialog.showModal();
+    requestAnimationFrame(() => confirmActionButton.focus());
+
+    return new Promise((resolve) => {
+      confirmDialog.addEventListener("close", () => {
+        resolve(confirmDialog.returnValue === "confirm");
+      }, { once: true });
+    });
   }
 
   function refreshOrderButtons() {
@@ -51,25 +77,32 @@
     row.querySelector(".command-input").value = item.command;
 
     row.querySelectorAll("input").forEach((input) => {
-      input.addEventListener("input", markDirty);
-      input.addEventListener("change", markDirty);
+      input.addEventListener("input", updateDirtyState);
+      input.addEventListener("change", updateDirtyState);
     });
     row.querySelector(".move-up").addEventListener("click", () => {
       const previous = row.previousElementSibling;
       if (previous) list.insertBefore(row, previous);
       refreshOrderButtons();
-      markDirty();
+      updateDirtyState();
     });
     row.querySelector(".move-down").addEventListener("click", () => {
       const next = row.nextElementSibling;
       if (next) list.insertBefore(next, row);
       refreshOrderButtons();
-      markDirty();
+      updateDirtyState();
     });
-    row.querySelector(".delete-button").addEventListener("click", () => {
+    row.querySelector(".delete-button").addEventListener("click", async () => {
+      const label = row.querySelector(".label-input").value.trim() || "未命名命令";
+      const confirmed = await requestConfirmation({
+        title: `删除“${label}”？`,
+        message: "该命令会从当前列表中移除，保存配置后才会生效。",
+        confirmLabel: "删除"
+      });
+      if (!confirmed) return;
       row.remove();
       refreshOrderButtons();
-      markDirty();
+      updateDirtyState();
     });
 
     const handle = row.querySelector(".drag-handle");
@@ -91,7 +124,7 @@
       row.classList.remove("dragging");
       list.querySelectorAll(".drag-over").forEach((item) => item.classList.remove("drag-over"));
       refreshOrderButtons();
-      markDirty();
+      updateDirtyState();
     });
     row.addEventListener("dragover", (event) => {
       if (!draggedRow || draggedRow === row) return;
@@ -115,15 +148,17 @@
     refreshOrderButtons();
   }
 
-  function collectCommands() {
+  function readCommands(validate = false) {
     let valid = true;
     const commands = [...list.querySelectorAll(".command-row")].map((row) => {
       const labelInput = row.querySelector(".label-input");
       const commandInput = row.querySelector(".command-input");
       const label = labelInput.value.trim();
       const command = commandInput.value.trim();
-      labelInput.classList.toggle("invalid", !label);
-      commandInput.classList.toggle("invalid", !command);
+      if (validate) {
+        labelInput.classList.toggle("invalid", !label);
+        commandInput.classList.toggle("invalid", !command);
+      }
       if (!label || !command) valid = false;
       return {
         id: row.dataset.id,
@@ -132,14 +167,16 @@
         enabled: row.querySelector(".enabled-input").checked
       };
     });
-    if (!valid) throw new Error("请填写所有按钮名称和发送内容，或删除空白项");
+    if (validate && !valid) throw new Error("请填写所有按钮名称和发送内容，或删除空白项");
     return commands;
   }
 
   async function save() {
     try {
-      const commands = collectCommands();
+      const commands = readCommands(true);
       await storageArea.set({ commands });
+      savedSnapshot = snapshot(commands);
+      hasUnsavedChanges = false;
       status.textContent = `已保存，共显示 ${commands.filter((item) => item.enabled).length} 个按钮`;
       status.dataset.kind = "success";
     } catch (error) {
@@ -159,18 +196,36 @@
     const row = createRow(item);
     list.appendChild(row);
     refreshOrderButtons();
-    markDirty();
+    updateDirtyState();
     row.querySelector(".label-input").select();
     row.scrollIntoView({ behavior: "smooth", block: "center" });
   });
-  resetButton.addEventListener("click", () => {
-    if (!confirm("恢复默认命令会覆盖当前未保存的配置，是否继续？")) return;
+  resetButton.addEventListener("click", async () => {
+    const confirmed = await requestConfirmation({
+      title: "恢复默认配置？",
+      message: "当前未保存的修改会被默认命令替换，恢复后仍需点击保存。",
+      confirmLabel: "恢复默认"
+    });
+    if (!confirmed) return;
     render(cloneDefaults());
-    markDirty();
+    updateDirtyState();
+  });
+
+  confirmDialog.addEventListener("click", (event) => {
+    if (event.target === confirmDialog) confirmDialog.close("cancel");
+  });
+
+  window.addEventListener("beforeunload", (event) => {
+    if (!hasUnsavedChanges) return;
+    event.preventDefault();
+    event.returnValue = "";
   });
 
   storageArea.get("commands").then(({ commands }) => {
     render(normalizeCommands(commands));
-    status.textContent = "修改后请保存";
+    savedSnapshot = snapshot(readCommands());
+    hasUnsavedChanges = false;
+    status.textContent = "当前配置已保存";
+    status.dataset.kind = "success";
   });
 })();

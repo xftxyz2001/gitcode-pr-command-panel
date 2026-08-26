@@ -73,6 +73,8 @@ h1 {
 .button.primary:hover { background: #245bcb; }
 .button.secondary { border: 1px solid #d0d5dd; background: #fff; color: #344054; }
 .button.secondary:hover { background: #f9fafb; }
+.button.danger { background: #d92d20; color: #fff; }
+.button.danger:hover { background: #b42318; }
 
 .summary-card, .commands-card {
   border: 1px solid #e1e6ef;
@@ -200,6 +202,66 @@ h1 {
 .page-footer a:hover { text-decoration: underline; }
 #save-status[data-kind="success"] { color: #067647; }
 #save-status[data-kind="error"] { color: #d92d20; }
+
+.confirm-dialog {
+  width: min(440px, calc(100vw - 40px));
+  padding: 0;
+  border: 0;
+  border-radius: 16px;
+  color: #182230;
+  background: transparent;
+  box-shadow: 0 24px 56px rgba(16, 24, 40, 0.24);
+}
+
+.confirm-dialog::backdrop {
+  background: rgba(16, 24, 40, 0.46);
+  backdrop-filter: blur(2px);
+}
+
+.confirm-card {
+  display: grid;
+  grid-template-columns: 42px 1fr;
+  gap: 14px;
+  padding: 24px;
+  border: 1px solid #e4e7ec;
+  border-radius: 16px;
+  background: #fff;
+}
+
+.confirm-icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #fee4e2;
+  color: #d92d20;
+  font-size: 20px;
+  font-weight: 750;
+}
+
+.confirm-content h2 {
+  margin: 1px 0 8px;
+  font-size: 18px;
+  line-height: 1.4;
+}
+
+.confirm-content p {
+  margin: 0;
+  color: #667085;
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.confirm-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.confirm-actions .button { min-width: 88px; }
 
 .mobile-label, .sr-only {
   position: absolute;
