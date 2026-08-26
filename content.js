@@ -6,6 +6,7 @@
   const REQUEST_EVENT = "gitcode-pr-command:send";
   const RESULT_EVENT = "gitcode-pr-command:result";
   const CONFIG_EVENT = "gitcode-pr-command:config";
+  const VIEWPORT_MARGIN = 8;
 
   let lastUrl = location.href;
   let commands = [];
@@ -132,6 +133,27 @@
       empty.textContent = "尚未勾选命令，请打开设置";
       grid.appendChild(empty);
     }
+
+    keepPanelInViewport(grid.closest(`#${PANEL_ID}`));
+  }
+
+  function keepPanelInViewport(panel) {
+    if (!panel) return;
+    const rect = panel.getBoundingClientRect();
+    if (
+      rect.left >= VIEWPORT_MARGIN
+      && rect.top >= VIEWPORT_MARGIN
+      && rect.right <= window.innerWidth - VIEWPORT_MARGIN
+      && rect.bottom <= window.innerHeight - VIEWPORT_MARGIN
+    ) return;
+
+    const maxLeft = Math.max(VIEWPORT_MARGIN, window.innerWidth - rect.width - VIEWPORT_MARGIN);
+    const maxTop = Math.max(VIEWPORT_MARGIN, window.innerHeight - rect.height - VIEWPORT_MARGIN);
+    panel.style.left = `${Math.min(maxLeft, Math.max(VIEWPORT_MARGIN, rect.left))}px`;
+    panel.style.top = `${Math.min(maxTop, Math.max(VIEWPORT_MARGIN, rect.top))}px`;
+    panel.style.right = "auto";
+    panel.style.bottom = "auto";
+    panel.style.transform = "none";
   }
 
   function createPanel() {
@@ -160,10 +182,10 @@
     });
     header.addEventListener("pointermove", (event) => {
       if (!dragState) return;
-      const maxLeft = Math.max(8, window.innerWidth - panel.offsetWidth - 8);
-      const maxTop = Math.max(8, window.innerHeight - panel.offsetHeight - 8);
-      panel.style.left = `${Math.min(maxLeft, Math.max(8, event.clientX - dragState.offsetX))}px`;
-      panel.style.top = `${Math.min(maxTop, Math.max(8, event.clientY - dragState.offsetY))}px`;
+      const maxLeft = Math.max(VIEWPORT_MARGIN, window.innerWidth - panel.offsetWidth - VIEWPORT_MARGIN);
+      const maxTop = Math.max(VIEWPORT_MARGIN, window.innerHeight - panel.offsetHeight - VIEWPORT_MARGIN);
+      panel.style.left = `${Math.min(maxLeft, Math.max(VIEWPORT_MARGIN, event.clientX - dragState.offsetX))}px`;
+      panel.style.top = `${Math.min(maxTop, Math.max(VIEWPORT_MARGIN, event.clientY - dragState.offsetY))}px`;
     });
     const stopDragging = (event) => {
       if (!dragState) return;
@@ -204,6 +226,7 @@
       toggle.textContent = collapsed ? "+" : "−";
       toggle.title = collapsed ? "展开" : "收起";
       toggle.setAttribute("aria-label", collapsed ? "展开快捷命令" : "收起快捷命令");
+      keepPanelInViewport(panel);
     });
     actions.append(settings, toggle);
     header.append(title, actions);
@@ -239,6 +262,9 @@
   });
   observer.observe(document.documentElement, { childList: true, subtree: true });
   window.addEventListener("popstate", syncPanel);
+  window.addEventListener("resize", () => {
+    keepPanelInViewport(document.getElementById(PANEL_ID));
+  });
 
   chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName !== "local" || !changes.commands) return;

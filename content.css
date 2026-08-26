@@ -12,6 +12,9 @@
   transform: translateY(-50%);
   z-index: 2147483647;
   width: 226px;
+  max-width: calc(100vw - 42px);
+  max-height: calc(100vh - 42px);
+  overflow: auto;
   padding: 12px;
   border: 1px solid var(--gc-panel-border);
   border-radius: 14px;
