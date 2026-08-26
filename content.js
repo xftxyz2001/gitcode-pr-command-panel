@@ -2,10 +2,14 @@
   "use strict";
 
   const PANEL_ID = "gitcode-pr-command-panel";
-  const PR_PATH_RE = /^\/[^/]+\/[^/]+\/pull\/\d+(?:\/|$)/;
+  const PR_PATH_RE = /^\/[^/]+\/[^/]+\/(?:pull|merge_requests)\/\d+(?:\/|$)/;
   const REQUEST_EVENT = "gitcode-pr-command:send";
   const RESULT_EVENT = "gitcode-pr-command:result";
   const CONFIG_EVENT = "gitcode-pr-command:config";
+  const PIPELINE_EVENT = "gitcode-pr-command:pipeline";
+  const PIPELINE_NOTIFICATION_RESULT_EVENT = "gitcode-pr-command:pipeline-notification-result";
+  const PIPELINE_POLL_REQUEST_EVENT = "gitcode-pr-command:poll-pipeline";
+  const PIPELINE_POLL_OBSERVED_EVENT = "gitcode-pr-command:pipeline-poll-observed";
   const VIEWPORT_MARGIN = 8;
 
   let lastUrl = location.href;
@@ -13,6 +17,7 @@
   let sending = false;
   let lastSentCommand = "";
   let lastSentAt = 0;
+  let monitorRegistration = "";
 
   function cloneDefaults() {
     return window.GITCODE_PR_DEFAULT_COMMANDS.map((item) => ({ ...item }));
@@ -44,6 +49,15 @@
 
   function isPrPage() {
     return location.hostname === "gitcode.com" && PR_PATH_RE.test(location.pathname);
+  }
+
+  function isNotificationMockPage() {
+    return location.protocol === "chrome-extension:"
+      && Boolean(window.GITCODE_PR_NOTIFICATION_MOCK);
+  }
+
+  function isPipelineMonitorPage() {
+    return isPrPage() || isNotificationMockPage();
   }
 
   function setStatus(message, kind = "info") {
@@ -137,6 +151,56 @@
     keepPanelInViewport(grid.closest(`#${PANEL_ID}`));
   }
 
+  function isDocumentActive() {
+    return document.visibilityState === "visible" && document.hasFocus();
+  }
+
+  function sendRuntimeMessage(message) {
+    if (!chrome.runtime?.id) return Promise.resolve(undefined);
+    try {
+      return Promise.resolve(chrome.runtime.sendMessage(message));
+    } catch (error) {
+      if (error instanceof Error && /Extension context invalidated/i.test(error.message)) {
+        return Promise.resolve(undefined);
+      }
+      return Promise.reject(error);
+    }
+  }
+
+  function updatePipelineMonitor(force = false) {
+    const registration = isPipelineMonitorPage()
+      ? `${location.href}|${isDocumentActive()}`
+      : "unregistered";
+    if (!force && registration === monitorRegistration) return;
+    monitorRegistration = registration;
+    sendRuntimeMessage(isPipelineMonitorPage()
+      ? {
+          type: "register-pipeline-monitor",
+          active: isDocumentActive(),
+          stateAt: Date.now(),
+          url: location.href
+        }
+      : { type: "unregister-pipeline-monitor" })
+      .catch(() => {});
+  }
+
+  function getPrTitle() {
+    const selectors = [
+      '[data-testid="merge-request-title"]',
+      ".merge-request-title",
+      ".title-container h1",
+      "main h1",
+      "h1"
+    ];
+    for (const selector of selectors) {
+      const title = document.querySelector(selector)?.textContent?.trim();
+      if (title) return title;
+    }
+    return document.title
+      .replace(/\s*[·|\-]\s*GitCode.*$/i, "")
+      .trim() || "未获取到 PR 标题";
+  }
+
   function keepPanelInViewport(panel) {
     if (!panel) return;
     const rect = panel.getBoundingClientRect();
@@ -208,7 +272,7 @@
       event.preventDefault();
       event.stopPropagation();
       try {
-        const response = await chrome.runtime.sendMessage({ type: "open-options" });
+        const response = await sendRuntimeMessage({ type: "open-options" });
         if (!response?.ok) throw new Error(response?.message || "配置页打开失败");
       } catch (error) {
         setStatus(error instanceof Error ? error.message : "配置页打开失败", "error");
@@ -252,6 +316,7 @@
     } else if (panel) {
       panel.remove();
     }
+    updatePipelineMonitor();
   }
 
   const observer = new MutationObserver(() => {
@@ -265,12 +330,99 @@
   window.addEventListener("resize", () => {
     keepPanelInViewport(document.getElementById(PANEL_ID));
   });
+  document.addEventListener("visibilitychange", () => updatePipelineMonitor());
+  window.addEventListener("focus", () => updatePipelineMonitor());
+  window.addEventListener("blur", () => updatePipelineMonitor());
+  window.addEventListener("beforeunload", () => {
+    sendRuntimeMessage({ type: "unregister-pipeline-monitor" }).catch(() => {});
+  });
+
+  chrome.runtime.onMessage.addListener((message) => {
+    if (message?.type !== "poll-pipeline") return false;
+    if (isPipelineMonitorPage() && isDocumentActive()) {
+      updatePipelineMonitor(true);
+    } else if (isPipelineMonitorPage()) {
+      document.dispatchEvent(new CustomEvent(PIPELINE_POLL_REQUEST_EVENT));
+    }
+    return false;
+  });
+
+  document.addEventListener(PIPELINE_POLL_OBSERVED_EVENT, () => {
+    if (!isPipelineMonitorPage()) return;
+    const now = Date.now();
+    sendRuntimeMessage({
+      type: "pipeline-poll-observed",
+      active: isDocumentActive(),
+      observedAt: now,
+      stateAt: now,
+      url: location.href
+    }).catch(() => {});
+  });
 
   chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName !== "local" || !changes.commands) return;
     commands = normalizeCommands(changes.commands.newValue);
     publishAllowedCommands();
     syncPanel();
+  });
+
+  function reportPipelineNotification(result) {
+    document.dispatchEvent(new CustomEvent(PIPELINE_NOTIFICATION_RESULT_EVENT, {
+      detail: JSON.stringify(result)
+    }));
+  }
+
+  document.addEventListener(PIPELINE_EVENT, async (event) => {
+    let pipeline;
+    try {
+      pipeline = JSON.parse(event.detail);
+    } catch {
+      return;
+    }
+    if (!pipeline || !["passed", "failed"].includes(pipeline.status)) return;
+    const active = isDocumentActive();
+    if (active && pipeline.source === "comment") {
+      reportPipelineNotification({
+        ok: false,
+        skipped: true,
+        message: "事件触发时页面仍在前台，已按正式逻辑抑制通知"
+      });
+      return;
+    }
+    try {
+      const response = await sendRuntimeMessage({
+        type: "notify-ci-pipeline",
+        pipeline: {
+          key: String(pipeline.key || ""),
+          status: pipeline.status,
+          kind: pipeline.kind === "docs" ? "docs" : "main",
+          source: pipeline.source === "comment" ? "comment" : "label",
+          runKey: String(pipeline.runKey || ""),
+          suppressNotification: active,
+          project: String(pipeline.project || "未知仓库"),
+          iid: Number(pipeline.iid),
+          title: getPrTitle(),
+          url: location.href
+        }
+      });
+      reportPipelineNotification(response?.ok
+        ? {
+            ok: true,
+            pending: Boolean(response.pending),
+            skipped: Boolean(response.skipped),
+            message: response.skipped
+              ? "页面在前台，已取消对应兜底通知"
+              : response.pending
+              ? "机器人评论已进入兜底等待，若未出现终态标签将发送通知"
+              : "浏览器通知 API 已成功创建通知"
+          }
+        : { ok: false, message: response?.message || "浏览器通知 API 返回失败" });
+    } catch (error) {
+      reportPipelineNotification({
+        ok: false,
+        message: error instanceof Error ? error.message : "无法连接扩展后台"
+      });
+    }
   });
 
   chrome.storage.local.get("commands").then(({ commands: saved }) => {

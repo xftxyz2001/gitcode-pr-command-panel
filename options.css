@@ -203,6 +203,7 @@ h1 {
 }
 .page-footer a { color: #2f6fed; text-decoration: none; }
 .page-footer a:hover { text-decoration: underline; }
+.footer-links { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px 18px; }
 #save-status[data-kind="success"] { color: #067647; }
 #save-status[data-kind="error"] { color: #d92d20; }
 

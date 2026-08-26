@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>流水线系统通知本地测试</title>
+  <link rel="stylesheet" href="mock.css">
+</head>
+<body>
+  <main class="mock-shell">
+    <p class="eyebrow">GitCode PR 快捷命令 · 本地 Mock</p>
+    <h1>本地 Mock PR：验证流水线通知</h1>
+    <p class="intro">本页不访问 GitCode。它会伪造真实结构的 discussions 响应，并走扩展的实际解析、前台判断、消息传递和系统通知链路。</p>
+
+    <section class="status-card" aria-labelledby="mock-status-title">
+      <h2 id="mock-status-title">环境状态</h2>
+      <dl>
+        <div><dt>仓库</dt><dd>Local/mock-repo</dd></div>
+        <div><dt>PR</dt><dd>#9527</dd></div>
+        <div><dt>历史基线</dt><dd id="baseline-status">正在建立…</dd></div>
+        <div><dt>页面状态</dt><dd id="visibility-status">正在读取…</dd></div>
+      </dl>
+    </section>
+
+    <section class="test-card" aria-labelledby="test-title">
+      <h2 id="test-title">测试步骤</h2>
+      <ol>
+        <li>等待“历史基线”显示为“已建立”。</li>
+        <li>点击下面任一按钮，把一条结果事件放入 Mock 队列。</li>
+        <li>切换到其他标签页、最小化浏览器或切到其他应用。</li>
+        <li>扩展后台会主动唤起本页并请求 Mock discussions 数据。</li>
+        <li>确认系统通知显示仓库、PR 编号、标题及通过/失败状态。</li>
+      </ol>
+      <div class="button-row">
+        <button class="test-button passed" type="button" data-status="passed">切走后模拟流水线通过</button>
+        <button class="test-button failed" type="button" data-status="failed">切走后模拟流水线失败</button>
+      </div>
+      <p id="test-status" class="test-status" role="status" aria-live="polite">请选择一个测试。</p>
+    </section>
+
+    <p class="notice">本页不再依赖页面定时器。切走后，扩展会等待15秒轮询心跳；确认页面没有自行请求后才主动补一次，并有30秒浏览器闹钟兜底。若通知 API 显示成功但没有弹窗，请检查浏览器及 Windows 的通知权限。</p>
+  </main>
+
+  <script src="mock-environment.js"></script>
+  <script src="page-bridge.js"></script>
+  <script src="defaults.js"></script>
+  <script src="content.js"></script>
+  <script src="mock.js"></script>
+</body>
+</html>
