@@ -1,9 +1,20 @@
 "use strict";
 
+let openingOptionsPage = null;
+
+function openOptionsPage() {
+  if (!openingOptionsPage) {
+    // Chrome will focus the existing options page instead of creating another tab.
+    openingOptionsPage = chrome.runtime.openOptionsPage()
+      .finally(() => { openingOptionsPage = null; });
+  }
+  return openingOptionsPage;
+}
+
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type !== "open-options") return false;
 
-  chrome.tabs.create({ url: chrome.runtime.getURL("options.html") })
+  openOptionsPage()
     .then(() => sendResponse({ ok: true }))
     .catch((error) => sendResponse({
       ok: false,

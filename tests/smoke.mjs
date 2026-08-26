@@ -85,14 +85,17 @@ assert.match(rejectedResult.message, /当前插件配置/);
 assert.equal(requests.length, 1);
 
 let messageListener = null;
-const openedTabs = [];
+let openOptionsCalls = 0;
+let finishOpeningOptions;
 const backgroundContext = {
   chrome: {
     runtime: {
-      getURL: (path) => `chrome-extension://test-extension/${path}`,
+      openOptionsPage: () => {
+        openOptionsCalls += 1;
+        return new Promise((resolve) => { finishOpeningOptions = resolve; });
+      },
       onMessage: { addListener: (listener) => { messageListener = listener; } }
-    },
-    tabs: { create: async (options) => { openedTabs.push(options); } }
+    }
   },
   Error
 };
@@ -101,7 +104,12 @@ assert.equal(typeof messageListener, "function");
 const openResult = new Promise((resolve) => {
   assert.equal(messageListener({ type: "open-options" }, {}, resolve), true);
 });
+const repeatedOpenResult = new Promise((resolve) => {
+  assert.equal(messageListener({ type: "open-options" }, {}, resolve), true);
+});
+assert.equal(openOptionsCalls, 1);
+finishOpeningOptions();
 assert.deepEqual(JSON.parse(JSON.stringify(await openResult)), { ok: true });
-assert.deepEqual(JSON.parse(JSON.stringify(openedTabs)), [{ url: "chrome-extension://test-extension/options.html" }]);
+assert.deepEqual(JSON.parse(JSON.stringify(await repeatedOpenResult)), { ok: true });
 
 console.log("Smoke tests passed");
