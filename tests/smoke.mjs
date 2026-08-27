@@ -6,15 +6,79 @@ const defaultsCode = fs.readFileSync(new URL("../defaults.js", import.meta.url),
 const bridgeCode = fs.readFileSync(new URL("../page-bridge.js", import.meta.url), "utf8");
 const backgroundCode = fs.readFileSync(new URL("../background.js", import.meta.url), "utf8");
 const mockEnvironmentCode = fs.readFileSync(new URL("../mock-environment.js", import.meta.url), "utf8");
+const contentCode = fs.readFileSync(new URL("../content.js", import.meta.url), "utf8");
+const optionsCode = fs.readFileSync(new URL("../options.js", import.meta.url), "utf8");
+const optionsHtml = fs.readFileSync(new URL("../options.html", import.meta.url), "utf8");
+const manifest = JSON.parse(fs.readFileSync(new URL("../manifest.json", import.meta.url), "utf8"));
 
 const defaultsContext = { window: {} };
 vm.runInNewContext(defaultsCode, defaultsContext);
 const defaults = defaultsContext.window.GITCODE_PR_DEFAULT_COMMANDS;
+const appearanceApi = defaultsContext.window.GITCODE_PR_APPEARANCE;
 assert.equal(defaults.length, 22);
 assert.deepEqual(
   JSON.parse(JSON.stringify(defaults.filter((item) => item.enabled).map((item) => item.command))),
   ["compile", "get-log", "/lgtm", "/approve"]
 );
+assert.equal(manifest.version, "1.5.0");
+assert.deepEqual(JSON.parse(JSON.stringify(appearanceApi.normalize())), {
+  buttonColor: "#ffffff",
+  panelBackgroundColor: "#ffffff",
+  backgroundImage: "",
+  backgroundImageFit: "cover",
+  backgroundOverlayOpacity: 72
+});
+assert.deepEqual(JSON.parse(JSON.stringify(appearanceApi.normalize({
+  buttonColor: "#AbC",
+  panelBackgroundColor: "invalid",
+  backgroundImage: "https://example.com/private.png",
+  backgroundImageFit: "stretch",
+  backgroundOverlayOpacity: 120
+}))), {
+  buttonColor: "#aabbcc",
+  panelBackgroundColor: "#ffffff",
+  backgroundImage: "",
+  backgroundImageFit: "cover",
+  backgroundOverlayOpacity: 100
+});
+const validBackgroundImage = "data:image/png;base64,iVBORw0KGgo=";
+assert.equal(appearanceApi.normalize({ backgroundImage: validBackgroundImage }).backgroundImage, validBackgroundImage);
+assert.equal(appearanceApi.normalize({
+  backgroundImage: `data:image/png;base64,${"a".repeat(Math.ceil(appearanceApi.MAX_BACKGROUND_IMAGE_BYTES * 4 / 3) + 129)}`
+}).backgroundImage, "");
+const defaultTheme = appearanceApi.createThemeTokens();
+assert.equal(defaultTheme.panelBackgroundCss, "rgba(255, 255, 255, 0.98)");
+assert.equal(defaultTheme.buttonHover, "#f4f7ff");
+assert.equal(defaultTheme.buttonHoverText, "#245bcb");
+assert.equal(appearanceApi.createThemeTokens({ buttonColor: "#b42318" }).buttonText, "#ffffff");
+assert.equal(appearanceApi.createThemeTokens({ buttonColor: "#fef08a" }).buttonText, "#000000");
+function testLuminance(color) {
+  const channels = [1, 3, 5].map((offset) => Number.parseInt(color.slice(offset, offset + 2), 16) / 255)
+    .map((channel) => channel <= 0.03928
+      ? channel / 12.92
+      : ((channel + 0.055) / 1.055) ** 2.4);
+  return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+}
+function contrastRatio(first, second) {
+  const firstLuminance = testLuminance(first);
+  const secondLuminance = testLuminance(second);
+  return (Math.max(firstLuminance, secondLuminance) + 0.05)
+    / (Math.min(firstLuminance, secondLuminance) + 0.05);
+}
+for (const buttonColor of ["#000000", "#123456", "#2f6fed", "#777777", "#b42318", "#00aa00", "#fef08a"]) {
+  const theme = appearanceApi.createThemeTokens({ buttonColor });
+  assert.ok(contrastRatio(theme.buttonColor, theme.buttonText) >= 4.5);
+  assert.ok(contrastRatio(theme.buttonHover, theme.buttonHoverText) >= 4.5);
+  assert.ok(contrastRatio(theme.buttonActive, theme.buttonActiveText) >= 4.5);
+}
+assert.match(optionsCode, /storageArea\.set\(\{ commands, appearance: normalizedAppearance \}\)/);
+assert.match(optionsCode, /MAX_BACKGROUND_IMAGE_BYTES/);
+assert.match(optionsCode, /function renderPreviewButtons\(\)/);
+assert.match(optionsCode, /item\.enabled && item\.label && item\.command/);
+assert.doesNotMatch(optionsHtml, /禁用示例|背景遮罩强度/);
+assert.match(optionsHtml, /背景图片淡化程度/);
+assert.match(contentCode, /changes\.appearance/);
+assert.match(contentCode, /image\.addEventListener\("error"/);
 
 class TestCustomEvent extends Event {
   constructor(type, init = {}) {

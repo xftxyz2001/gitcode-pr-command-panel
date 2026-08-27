@@ -11,8 +11,8 @@
     <header class="page-header">
       <div>
         <p class="eyebrow">GitCode PR 快捷命令</p>
-        <h1>配置悬浮按钮</h1>
-        <p class="intro">勾选需要显示的命令，修改按钮名称和发送内容，并通过拖动或箭头调整顺序。</p>
+        <h1>配置悬浮面板</h1>
+        <p class="intro">配置命令按钮与面板外观，保存后会同步应用到所有已打开的 GitCode PR 页面。</p>
       </div>
       <div class="header-actions">
         <button id="reset-button" class="button secondary" type="button">恢复默认</button>
@@ -26,6 +26,64 @@
         <span>compile、get-log、/lgtm、/approve</span>
       </div>
       <p>默认命令来自 Ascend 社区机器人使用指南；参数化命令使用指南中的示例值，启用前请按仓库实际标签修改。</p>
+    </section>
+
+    <section class="appearance-card" aria-labelledby="appearance-title">
+      <div class="section-heading">
+        <div>
+          <h2 id="appearance-title">外观</h2>
+          <p>文字色及按钮交互色会根据所选颜色自动生成，保证普通、悬停和按下状态清晰可辨。</p>
+        </div>
+        <button id="clear-background-button" class="button secondary compact" type="button">清除背景图片</button>
+      </div>
+      <div class="appearance-layout">
+        <div class="appearance-controls">
+          <label class="appearance-field">
+            <span>命令按钮颜色</span>
+            <span class="color-control">
+              <input id="button-color" type="color" value="#ffffff">
+              <output id="button-color-value" for="button-color">#ffffff</output>
+            </span>
+          </label>
+          <label class="appearance-field">
+            <span>面板背景色</span>
+            <span class="color-control">
+              <input id="panel-background-color" type="color" value="#ffffff">
+              <output id="panel-background-color-value" for="panel-background-color">#ffffff</output>
+            </span>
+          </label>
+          <label class="appearance-field file-field">
+            <span>面板背景图片</span>
+            <input id="background-image" type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/avif">
+            <span id="background-image-status" class="field-help">未选择图片，最大 2 MB</span>
+          </label>
+          <label class="appearance-field">
+            <span>图片显示方式</span>
+            <select id="background-image-fit">
+              <option value="cover">覆盖面板（Cover）</option>
+              <option value="contain">完整包含（Contain）</option>
+              <option value="center">原始大小居中</option>
+            </select>
+          </label>
+          <label class="appearance-field">
+            <span>背景图片淡化程度 <output id="background-overlay-value" for="background-overlay-opacity">72%</output></span>
+            <input id="background-overlay-opacity" type="range" min="0" max="100" step="1" value="72">
+            <span class="field-help">数值越高，背景图片越淡，面板文字越容易看清。</span>
+          </label>
+        </div>
+        <div class="appearance-preview-wrap">
+          <span class="preview-label">实时预览</span>
+          <section id="appearance-preview" class="appearance-preview" aria-label="悬浮面板外观预览">
+            <div class="preview-header">
+              <strong>PR 快捷命令</strong>
+              <span>⚙ &nbsp;−</span>
+            </div>
+            <div class="preview-grid">
+            </div>
+            <p id="appearance-preview-status">正在读取已启用命令…</p>
+          </section>
+        </div>
+      </div>
     </section>
 
     <section class="commands-card">

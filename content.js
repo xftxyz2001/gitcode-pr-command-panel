@@ -18,6 +18,8 @@
   let lastSentCommand = "";
   let lastSentAt = 0;
   let monitorRegistration = "";
+  let appearance = window.GITCODE_PR_APPEARANCE.normalize();
+  let appearanceImageGeneration = 0;
 
   function cloneDefaults() {
     return window.GITCODE_PR_DEFAULT_COMMANDS.map((item) => ({ ...item }));
@@ -49,6 +51,46 @@
 
   function isPrPage() {
     return location.hostname === "gitcode.com" && PR_PATH_RE.test(location.pathname);
+  }
+
+  function setPanelBackground(panel, tokens, generation) {
+    panel.style.backgroundColor = tokens.panelBackgroundCss;
+    panel.style.backgroundImage = "none";
+    if (!tokens.backgroundImage) return;
+    const image = new Image();
+    image.addEventListener("load", () => {
+      if (generation !== appearanceImageGeneration || !panel.isConnected) return;
+      const overlay = tokens.backgroundOverlayOpacity / 100;
+      panel.style.backgroundImage = `linear-gradient(rgba(${tokens.overlayRgb}, ${overlay}), rgba(${tokens.overlayRgb}, ${overlay})), url("${tokens.backgroundImage}")`;
+      panel.style.backgroundSize = `auto, ${tokens.backgroundImageFit === "center" ? "auto" : tokens.backgroundImageFit}`;
+      panel.style.backgroundPosition = "center, center";
+      panel.style.backgroundRepeat = "no-repeat, no-repeat";
+    }, { once: true });
+    image.addEventListener("error", () => {
+      if (generation === appearanceImageGeneration) panel.style.backgroundImage = "none";
+    }, { once: true });
+    image.src = tokens.backgroundImage;
+  }
+
+  function applyAppearance(panel = document.getElementById(PANEL_ID)) {
+    if (!panel) return;
+    const tokens = window.GITCODE_PR_APPEARANCE.createThemeTokens(appearance);
+    panel.style.setProperty("--gc-panel-bg", tokens.panelBackgroundCss);
+    panel.style.setProperty("--gc-panel-border", tokens.panelBorder);
+    panel.style.setProperty("--gc-panel-text", tokens.panelText);
+    panel.style.setProperty("--gc-panel-muted", tokens.panelMuted);
+    panel.style.setProperty("--gc-panel-surface-hover", tokens.panelSurfaceHover);
+    panel.style.setProperty("--gc-panel-danger", tokens.panelDanger);
+    panel.style.setProperty("--gc-panel-success", tokens.panelSuccess);
+    panel.style.setProperty("--gc-button-bg", tokens.buttonColor);
+    panel.style.setProperty("--gc-button-text", tokens.buttonText);
+    panel.style.setProperty("--gc-button-hover-text", tokens.buttonHoverText);
+    panel.style.setProperty("--gc-button-active-text", tokens.buttonActiveText);
+    panel.style.setProperty("--gc-button-hover", tokens.buttonHover);
+    panel.style.setProperty("--gc-button-active", tokens.buttonActive);
+    panel.style.setProperty("--gc-button-border", tokens.buttonBorder);
+    appearanceImageGeneration += 1;
+    setPanelBackground(panel, tokens, appearanceImageGeneration);
   }
 
   function isNotificationMockPage() {
@@ -305,6 +347,7 @@
 
     panel.append(header, grid, status);
     document.body.appendChild(panel);
+    applyAppearance(panel);
     renderButtons();
   }
 
@@ -360,10 +403,14 @@
   });
 
   chrome.storage.onChanged.addListener((changes, areaName) => {
-    if (areaName !== "local" || !changes.commands) return;
-    commands = normalizeCommands(changes.commands.newValue);
-    publishAllowedCommands();
+    if (areaName !== "local" || (!changes.commands && !changes.appearance)) return;
+    if (changes.commands) {
+      commands = normalizeCommands(changes.commands.newValue);
+      publishAllowedCommands();
+    }
+    if (changes.appearance) appearance = window.GITCODE_PR_APPEARANCE.normalize(changes.appearance.newValue);
     syncPanel();
+    applyAppearance();
   });
 
   function reportPipelineNotification(result) {
@@ -425,8 +472,9 @@
     }
   });
 
-  chrome.storage.local.get("commands").then(({ commands: saved }) => {
+  chrome.storage.local.get(["commands", "appearance"]).then(({ commands: saved, appearance: savedAppearance }) => {
     commands = normalizeCommands(saved);
+    appearance = window.GITCODE_PR_APPEARANCE.normalize(savedAppearance);
     publishAllowedCommands();
     syncPanel();
   });
