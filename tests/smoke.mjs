@@ -21,7 +21,7 @@ assert.deepEqual(
   JSON.parse(JSON.stringify(defaults.filter((item) => item.enabled).map((item) => item.command))),
   ["compile", "retry", "/lgtm", "/approve"]
 );
-assert.equal(manifest.version, "1.6.0");
+assert.equal(manifest.version, "1.6.1");
 assert.deepEqual(JSON.parse(JSON.stringify(appearanceApi.normalize())), {
   buttonColor: "#ffffff",
   panelBackgroundColor: "#ffffff",
@@ -81,6 +81,29 @@ assert.match(optionsHtml, /背景图片淡化程度/);
 assert.doesNotMatch(optionsCss, /\.preview-grid\s*\{[^}]*\b(?:max-height|overflow)\s*:/s);
 assert.match(contentCode, /changes\.appearance/);
 assert.match(contentCode, /image\.addEventListener\("error"/);
+assert.match(contentCode, /atomGitSuffix/);
+assert.doesNotMatch(contentCode, /["']main h1["']/);
+assert.doesNotMatch(contentCode, /^\s*["']h1["']/m);
+const getPrTitleSource = contentCode.match(/(function getPrTitle\(\) \{[\s\S]*?\n  \})\n\n  function keepPanelInViewport/)?.[1];
+assert.ok(getPrTitleSource);
+const extractedPrTitle = vm.runInNewContext(`${getPrTitleSource}; getPrTitle()`, {
+  document: {
+    title: "错误的页面标题-pytorch-AtomGit",
+    querySelector: (selector) => selector === ".can-edit.title[title]"
+      ? { getAttribute: () => "docs: update torch.utils.benchmark API support list" }
+      : selector === "main h1" ? { textContent: "【合入来源】" } : null
+  },
+  location: { pathname: "/Ascend/pytorch/pull/45386" }
+});
+assert.equal(extractedPrTitle, "docs: update torch.utils.benchmark API support list");
+const documentTitleFallback = vm.runInNewContext(`${getPrTitleSource}; getPrTitle()`, {
+  document: {
+    title: "docs: update torch.utils.benchmark API support list-pytorch-AtomGit",
+    querySelector: () => null
+  },
+  location: { pathname: "/Ascend/pytorch/pull/45386" }
+});
+assert.equal(documentTitleFallback, "docs: update torch.utils.benchmark API support list");
 
 class TestCustomEvent extends Event {
   constructor(type, init = {}) {
@@ -496,7 +519,7 @@ assert.equal(typeof alarmListener, "function");
 assert.equal(typeof removedTabListener, "function");
 assert.equal(typeof notificationClickListener, "function");
 assert.equal(typeof notificationButtonClickListener, "function");
-assert.equal(typeof notificationClosedListener, "function");
+assert.equal(notificationClosedListener, null);
 
 const monitorResult = new Promise((resolve) => {
   assert.equal(messageListener({
@@ -677,6 +700,8 @@ const passedNotificationResult = new Promise((resolve) => {
 });
 assert.deepEqual(JSON.parse(JSON.stringify(await passedNotificationResult)), { ok: true, pending: false, skipped: false });
 assert.equal(createdNotifications.length, 2);
+assert.match(createdNotifications[1].options.title, /流水线通过.*Ascend\/pytorch #123/);
+assert.equal(createdNotifications[1].options.message, "Fix flaky test");
 assert.equal(createdNotifications[1].options.iconUrl, "icons/pipeline-passed128.png");
 assert.equal(createdNotifications[1].options.buttons, undefined);
 assert.equal(sessionValues.pipelineNotificationContexts[createdNotifications[1].id].pipelineUrl, "");
@@ -719,6 +744,7 @@ const docsNotificationResult = new Promise((resolve) => {
 assert.deepEqual(JSON.parse(JSON.stringify(await docsNotificationResult)), { ok: true, pending: false, skipped: false });
 assert.equal(createdNotifications.length, 3);
 assert.match(createdNotifications[2].options.title, /文档流水线失败.*Ascend\/pytorch #123/);
+assert.equal(createdNotifications[2].options.message, "Fix flaky test");
 assert.equal(createdNotifications[2].options.iconUrl, "icons/pipeline-failed128.png");
 
 const noDetailsNotificationResult = new Promise((resolve) => {
@@ -814,10 +840,6 @@ notificationButtonClickListener(createdNotifications[4].id, 0);
 await new Promise((resolve) => setImmediate(resolve));
 await new Promise((resolve) => setImmediate(resolve));
 assert.equal(createdTabs.at(-1).url, secondDetailsUrl);
-
-notificationClosedListener(createdNotifications[2].id);
-await new Promise((resolve) => setImmediate(resolve));
-assert.equal(sessionValues.pipelineNotificationContexts[createdNotifications[2].id], undefined);
 
 const commentFallbackMessage = {
   type: "notify-ci-pipeline",

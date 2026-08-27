@@ -34,7 +34,7 @@
 - `https://gitcode.com/<组织>/<仓库>/pull/<编号>`
 - `https://gitcode.com/<组织>/<仓库>/merge_requests/<编号>`
 
-扩展还会复用 GitCode 讨论页自身的轮询结果监控主流水线与文档流水线状态。主流水线识别 `ci-pipeline-passed` / `ci-pipeline-failed`，文档流水线识别 `docs-ci-pipeline-success` / `docs-ci-pipeline-failed`；一次 `add label` 同时包含多个逗号分隔标签时也会逐个识别。对应页面不在当前前台时，系统通知会提示仓库、PR 编号、PR 标题以及通过/失败状态。删除标签或普通评论中仅仅提到这些名称不会触发通知。
+扩展还会复用 GitCode PR 页面自身的轮询结果监控主流水线与文档流水线状态。主流水线识别 `ci-pipeline-passed` / `ci-pipeline-failed`，文档流水线识别 `docs-ci-pipeline-success` / `docs-ci-pipeline-failed`；一次 `add label` 同时包含多个逗号分隔标签时也会逐个识别。对应页面不在当前前台时，系统通知会读取页面顶部标题节点的 `title` 属性，提示仓库、PR 编号、PR 标题以及通过/失败状态，不会把 PR 正文中的一级标题当作 PR 标题。删除标签或普通评论中仅仅提到这些名称不会触发通知。
 
 主流水线成功标签会立即通知，不等待详情评论；点击通知正文即可回到 PR。主流水线失败标签会最多等待60秒：如果期间收到本次新增或更新的 `ascend-robot` 失败终态评论，就从评论中取得详情地址并发送带按钮的失败通知；超时仍未收到评论，则发送不带详情按钮的失败通知，不会继续等待或在评论迟到后重复通知。标签前刚刚收到的失败终态评论也可以直接与标签配对。关联过程不再从历史评论中按时间猜测链接。
 

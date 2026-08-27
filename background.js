@@ -604,10 +604,6 @@ chrome.notifications.onButtonClicked.addListener((notificationId, buttonIndex) =
   queuePipelineMonitorMutation(() => handlePipelineNotificationAction(notificationId, buttonIndex)).catch(() => {});
 });
 
-chrome.notifications.onClosed.addListener((notificationId) => {
-  queuePipelineMonitorMutation(() => removePipelineNotificationContext(notificationId)).catch(() => {});
-});
-
 chrome.tabs.onRemoved.addListener((tabId) => {
   queuePipelineMonitorMutation(() => unregisterPipelineMonitor(tabId)).catch(() => {});
 });

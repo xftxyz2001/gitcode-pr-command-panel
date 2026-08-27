@@ -227,12 +227,24 @@
   }
 
   function getPrTitle() {
+    const visibleTitle = document.querySelector(".can-edit.title[title]")
+      ?.getAttribute("title")
+      ?.trim();
+    if (visibleTitle) return visibleTitle;
+
+    const pathParts = location.pathname.split("/").filter(Boolean);
+    const repository = pathParts.length >= 2 ? decodeURIComponent(pathParts[1]) : "";
+    const pageTitle = document.title.trim();
+    const atomGitSuffix = repository ? `-${repository}-AtomGit` : "-AtomGit";
+    if (pageTitle.toLowerCase().endsWith(atomGitSuffix.toLowerCase())) {
+      const title = pageTitle.slice(0, -atomGitSuffix.length).trim();
+      if (title) return title;
+    }
+
     const selectors = [
       '[data-testid="merge-request-title"]',
       ".merge-request-title",
-      ".title-container h1",
-      "main h1",
-      "h1"
+      ".title-container h1"
     ];
     for (const selector of selectors) {
       const title = document.querySelector(selector)?.textContent?.trim();
@@ -240,6 +252,7 @@
     }
     return document.title
       .replace(/\s*[·|\-]\s*GitCode.*$/i, "")
+      .replace(/-AtomGit$/i, "")
       .trim() || "未获取到 PR 标题";
   }
 

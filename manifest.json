@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "GitCode PR 快捷命令",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "description": "可配置的 GitCode Pull Request 机器人快捷命令面板。",
   "icons": {
     "16": "icons/icon16.png",
