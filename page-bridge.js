@@ -79,17 +79,35 @@
       .trim();
   }
 
+  function extractPipelineUrl(body) {
+    const matches = String(body || "").match(/https:\/\/[^\s"'<>]+/gi) || [];
+    for (const match of matches) {
+      try {
+        const url = new URL(match.replace(/&amp;/gi, "&"));
+        const hostname = url.hostname.toLowerCase();
+        if (
+          (hostname === "openlibing.com" || hostname.endsWith(".openlibing.com"))
+          && url.pathname === "/apps/pipelineDetail"
+        ) return url.href;
+      } catch {
+        // Ignore malformed and unrelated links in robot comments.
+      }
+    }
+    return "";
+  }
+
   function readPipelineCommentStatus(body) {
     const text = normalizeMessageText(body);
     if (!/^流水线\s+/i.test(text)) return null;
     const runMatch = text.match(/^流水线\s+(.+?)\s+\[(?:\s*)commitID[：:]|^流水线\s+(\S+)/i);
     const runKey = (runMatch?.[1] || runMatch?.[2] || "unknown-run").trim();
+    const pipelineUrl = extractPipelineUrl(body);
     if (/^流水线[\s\S]{0,400}?运行失败/.test(text)) {
-      return { status: "failed", runKey };
+      return { status: "failed", runKey, pipelineUrl };
     }
     if (!/^流水线[\s\S]{0,400}?已完成/.test(text)) return null;
     const overallPassed = /<td[^>]*>\s*流水线\s*<\/td>\s*<td[^>]*>[\s\S]*?<\/td>\s*<td[^>]*>\s*(?:&#9989;|✅|SUCCESS)\s*<\/td>/i.test(String(body));
-    return overallPassed ? { status: "passed", runKey } : null;
+    return overallPassed ? { status: "passed", runKey, pipelineUrl } : null;
   }
 
   function snapshotPipelineNotes(discussions, fallbackProject) {
@@ -117,6 +135,7 @@
           status: result.status,
           source: "comment",
           runKey: result.runKey,
+          pipelineUrl: result.pipelineUrl,
           project: note.project || discussion.project_full_path || discussion.project || fallbackProject || "未知仓库",
           occurredAt
         });
@@ -183,7 +202,7 @@
       for (const event of events) {
         const { occurredAt: _occurredAt, noteKey: _noteKey, fingerprint: _fingerprint, ...publicEvent } = event;
         document.dispatchEvent(new CustomEvent(PIPELINE_EVENT, {
-          detail: JSON.stringify({ ...publicEvent, iid })
+          detail: JSON.stringify({ ...publicEvent, iid, eventAt: _occurredAt })
         }));
       }
     }).catch(() => {});

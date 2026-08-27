@@ -445,6 +445,8 @@
           kind: pipeline.kind === "docs" ? "docs" : "main",
           source: pipeline.source === "comment" ? "comment" : "label",
           runKey: String(pipeline.runKey || ""),
+          pipelineUrl: String(pipeline.pipelineUrl || ""),
+          eventAt: Number(pipeline.eventAt) || 0,
           suppressNotification: active,
           project: String(pipeline.project || "未知仓库"),
           iid: Number(pipeline.iid),

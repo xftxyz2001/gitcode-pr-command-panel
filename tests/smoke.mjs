@@ -21,7 +21,7 @@ assert.deepEqual(
   JSON.parse(JSON.stringify(defaults.filter((item) => item.enabled).map((item) => item.command))),
   ["compile", "get-log", "/lgtm", "/approve"]
 );
-assert.equal(manifest.version, "1.5.0");
+assert.equal(manifest.version, "1.6.0");
 assert.deepEqual(JSON.parse(JSON.stringify(appearanceApi.normalize())), {
   buttonColor: "#ffffff",
   panelBackgroundColor: "#ffffff",
@@ -195,7 +195,8 @@ discussionsPayload.content.data.unshift({
 });
 await context.fetch("/issuepr/api/v1/projects/Ascend%2Fpytorch/merge_requests/123/discussions?page=1&per_page=100&type=user&sort=desc");
 await new Promise((resolve) => setImmediate(resolve));
-assert.deepEqual(pipelineEvents, [{
+assert.equal(typeof pipelineEvents[0].eventAt, "number");
+assert.deepEqual(pipelineEvents.map(({ eventAt, ...event }) => event), [{
   key: "101",
   status: "failed",
   kind: "main",
@@ -234,7 +235,7 @@ discussionsPayload.content.data.unshift({
 });
 await context.fetch("/issuepr/api/v1/projects/Ascend%2Fpytorch/merge_requests/123/discussions?page=1&per_page=20&type=user&sort=desc");
 await new Promise((resolve) => setImmediate(resolve));
-assert.deepEqual(pipelineEvents.slice(-3), [{
+assert.deepEqual(pipelineEvents.slice(-3).map(({ eventAt, ...event }) => event), [{
   key: "106",
   status: "passed",
   kind: "main",
@@ -267,7 +268,7 @@ const pipelineNote = {
   author: { username: "ascend-robot" },
   created_at: "2026-08-26T10:00:00+08:00",
   updated_at: "2026-08-26T10:00:00+08:00",
-  body: "流水线 PR-pipeline_pytorch#1 [ commitID：abc123 ] 已完成<table><tr><td>流水线</td><td>PR-pipeline_pytorch</td><td>&#9989;</td></tr></table>"
+  body: "流水线 PR-pipeline_pytorch#1 [ commitID：abc123 ] 已完成<a href=\"https://www.openlibing.com/apps/pipelineDetail?pipelineId=100&amp;pipelineRunId=200\">查看详情</a><table><tr><td>流水线</td><td>PR-pipeline_pytorch</td><td>&#9989;</td></tr></table>"
 };
 discussionsPayload.content.data.unshift({
   id: "pipeline-discussion-107",
@@ -279,15 +280,30 @@ assert.equal(pipelineEvents.at(-1).status, "passed");
 assert.equal(pipelineEvents.at(-1).kind, "main");
 assert.equal(pipelineEvents.at(-1).source, "comment");
 assert.equal(pipelineEvents.at(-1).runKey, "PR-pipeline_pytorch#1");
+assert.equal(pipelineEvents.at(-1).pipelineUrl, "https://www.openlibing.com/apps/pipelineDetail?pipelineId=100&pipelineRunId=200");
 
 const eventCountBeforeNoteUpdate = pipelineEvents.length;
 pipelineNote.updated_at = "2026-08-26T10:01:00+08:00";
-pipelineNote.body = "流水线 PR-pipeline_pytorch#1 [ commitID：abc123 ] 运行失败";
+pipelineNote.body = "流水线 PR-pipeline_pytorch#1 [ commitID：abc123 ] 运行失败 https://www.openlibing.com/apps/pipelineDetail?pipelineId=100&pipelineRunId=201";
 await context.fetch("/issuepr/api/v1/projects/Ascend%2Fpytorch/merge_requests/123/discussions?page=1&per_page=20&type=user&sort=desc");
 await new Promise((resolve) => setImmediate(resolve));
 assert.equal(pipelineEvents.length, eventCountBeforeNoteUpdate + 1);
 assert.equal(pipelineEvents.at(-1).status, "failed");
 assert.equal(pipelineEvents.at(-1).source, "comment");
+assert.equal(pipelineEvents.at(-1).pipelineUrl, "https://www.openlibing.com/apps/pipelineDetail?pipelineId=100&pipelineRunId=201");
+
+discussionsPayload.content.data.unshift({
+  id: 1072,
+  project: "Ascend/pytorch",
+  body: "add label ci-pipeline-failed, ascend-cla/yes",
+  action: "enterprise_label",
+  created_at: "2026-08-26T10:01:10+08:00"
+});
+await context.fetch("/issuepr/api/v1/projects/Ascend%2Fpytorch/merge_requests/123/discussions?page=1&per_page=20&type=user&sort=desc");
+await new Promise((resolve) => setImmediate(resolve));
+assert.equal(pipelineEvents.at(-1).source, "label");
+assert.equal(pipelineEvents.at(-1).status, "failed");
+assert.equal(pipelineEvents.at(-1).pipelineUrl, undefined);
 
 discussionsPayload.content.data.unshift({
   id: 108,
@@ -389,19 +405,30 @@ assert.equal(mockPipelineEvents.length, 0);
 mockContext.GITCODE_PR_NOTIFICATION_MOCK.queuePipelineEvent("failed");
 mockDocument.dispatchEvent(new TestCustomEvent("gitcode-pr-command:poll-pipeline"));
 await new Promise((resolve) => setImmediate(resolve));
-assert.equal(mockPipelineEvents.length, 1);
-assert.equal(mockPipelineEvents[0].status, "failed");
-assert.equal(mockPipelineEvents[0].project, "Local/mock-repo");
-assert.equal(mockPipelineEvents[0].iid, 9527);
+assert.equal(mockPipelineEvents.length, 2);
+const mockCommentEvent = mockPipelineEvents.find((event) => event.source === "comment");
+const mockLabelEvent = mockPipelineEvents.find((event) => event.source === "label");
+assert.equal(mockCommentEvent.status, "failed");
+assert.equal(mockLabelEvent.status, "failed");
+assert.equal(mockLabelEvent.project, "Local/mock-repo");
+assert.equal(mockLabelEvent.iid, 9527);
+assert.equal(mockLabelEvent.pipelineUrl, undefined);
 
 let messageListener = null;
 let openOptionsCalls = 0;
 let finishOpeningOptions;
 const createdNotifications = [];
+const clearedNotifications = [];
+const createdTabs = [];
+const updatedTabs = [];
+const focusedWindows = [];
 let sessionValues = {};
 let alarmState = null;
 let alarmListener = null;
 let removedTabListener = null;
+let notificationClickListener = null;
+let notificationButtonClickListener = null;
+let notificationClosedListener = null;
 let pollingTimer = null;
 const sentTabMessages = [];
 const backgroundContext = {
@@ -418,10 +445,28 @@ const backgroundContext = {
     },
     tabs: {
       sendMessage: async (tabId, message) => { sentTabMessages.push({ tabId, message }); },
+      create: async (options) => {
+        createdTabs.push(options);
+        return { id: 100 + createdTabs.length, windowId: 9, ...options };
+      },
+      update: async (tabId, options) => {
+        updatedTabs.push({ tabId, options });
+        return { id: tabId, windowId: 9, ...options };
+      },
       onRemoved: { addListener: (listener) => { removedTabListener = listener; } }
     },
+    windows: {
+      update: async (windowId, options) => {
+        focusedWindows.push({ windowId, options });
+        return { id: windowId, ...options };
+      }
+    },
     notifications: {
-      create: async (id, options) => { createdNotifications.push({ id, options }); }
+      create: async (id, options) => { createdNotifications.push({ id, options }); },
+      clear: async (id) => { clearedNotifications.push(id); return true; },
+      onClicked: { addListener: (listener) => { notificationClickListener = listener; } },
+      onButtonClicked: { addListener: (listener) => { notificationButtonClickListener = listener; } },
+      onClosed: { addListener: (listener) => { notificationClosedListener = listener; } }
     },
     storage: {
       session: {
@@ -449,6 +494,9 @@ vm.runInNewContext(backgroundCode, backgroundContext);
 assert.equal(typeof messageListener, "function");
 assert.equal(typeof alarmListener, "function");
 assert.equal(typeof removedTabListener, "function");
+assert.equal(typeof notificationClickListener, "function");
+assert.equal(typeof notificationButtonClickListener, "function");
+assert.equal(typeof notificationClosedListener, "function");
 
 const monitorResult = new Promise((resolve) => {
   assert.equal(messageListener({
@@ -549,33 +597,112 @@ const notificationMessage = {
     source: "label",
     project: "Ascend/pytorch",
     iid: 123,
-    title: "Fix flaky test"
+    title: "Fix flaky test",
+    url: "https://gitcode.com/Ascend/pytorch/pull/123",
+    pipelineUrl: "",
+    eventAt: 100000
   }
 };
 const notificationResult = new Promise((resolve) => {
   assert.equal(messageListener(notificationMessage, {}, resolve), true);
 });
-assert.deepEqual(JSON.parse(JSON.stringify(await notificationResult)), { ok: true, pending: false, skipped: false });
+assert.deepEqual(JSON.parse(JSON.stringify(await notificationResult)), {
+  ok: true,
+  pending: true,
+  skipped: false,
+  detailsFound: false
+});
+assert.equal(createdNotifications.length, 0);
+assert.equal(sessionValues.pendingFailedPipelineLabels.length, 1);
+
+const failedDetailsUrl = "https://www.openlibing.com/apps/pipelineDetail?pipelineId=101&pipelineRunId=failed";
+const failedDetailsResult = new Promise((resolve) => {
+  assert.equal(messageListener({
+    type: "notify-ci-pipeline",
+    pipeline: {
+      ...notificationMessage.pipeline,
+      key: "note-101:updated",
+      source: "comment",
+      runKey: "PR-pipeline_pytorch#101",
+      pipelineUrl: failedDetailsUrl
+    }
+  }, {}, resolve), true);
+});
+assert.deepEqual(JSON.parse(JSON.stringify(await failedDetailsResult)), {
+  ok: true,
+  pending: false,
+  skipped: false,
+  detailsFound: true
+});
 assert.equal(createdNotifications.length, 1);
 assert.match(createdNotifications[0].options.title, /流水线失败.*Ascend\/pytorch #123/);
 assert.equal(createdNotifications[0].options.message, "Fix flaky test");
 assert.equal(createdNotifications[0].options.iconUrl, "icons/pipeline-failed128.png");
+assert.equal(createdNotifications[0].options.buttons[0].title, "查看流水线详情");
+assert.equal(sessionValues.pipelineNotificationContexts[createdNotifications[0].id].pipelineUrl, failedDetailsUrl);
+assert.equal(sessionValues.pendingFailedPipelineLabels.length, 0);
+
+sessionValues.pipelineMonitors[0].url = "https://gitcode.com/Ascend/pytorch/merge_requests/123";
+notificationClickListener(createdNotifications[0].id);
+await new Promise((resolve) => setImmediate(resolve));
+await new Promise((resolve) => setImmediate(resolve));
+assert.deepEqual(JSON.parse(JSON.stringify(updatedTabs.at(-1))), { tabId: 77, options: { active: true } });
+assert.deepEqual(JSON.parse(JSON.stringify(focusedWindows.at(-1))), { windowId: 9, options: { focused: true } });
+assert.equal(createdTabs.length, 0);
+assert.equal(sessionValues.pipelineNotificationContexts[createdNotifications[0].id], undefined);
+assert.equal(clearedNotifications.at(-1), createdNotifications[0].id);
 
 const duplicateNotificationResult = new Promise((resolve) => {
   assert.equal(messageListener(notificationMessage, {}, resolve), true);
 });
-assert.deepEqual(JSON.parse(JSON.stringify(await duplicateNotificationResult)), { ok: true, pending: false, skipped: false });
+assert.deepEqual(JSON.parse(JSON.stringify(await duplicateNotificationResult)), {
+  ok: true,
+  pending: true,
+  skipped: false,
+  detailsFound: false
+});
 assert.equal(createdNotifications.length, 1);
+assert.equal(sessionValues.pendingFailedPipelineLabels.length, 1);
 
 const passedNotificationResult = new Promise((resolve) => {
   assert.equal(messageListener({
     ...notificationMessage,
-    pipeline: { ...notificationMessage.pipeline, key: "102", status: "passed" }
+    pipeline: {
+      ...notificationMessage.pipeline,
+      key: "102",
+      status: "passed",
+      pipelineUrl: "https://www.openlibing.com/apps/pipelineDetail?pipelineId=102&pipelineRunId=passed"
+    }
   }, {}, resolve), true);
 });
 assert.deepEqual(JSON.parse(JSON.stringify(await passedNotificationResult)), { ok: true, pending: false, skipped: false });
 assert.equal(createdNotifications.length, 2);
 assert.equal(createdNotifications[1].options.iconUrl, "icons/pipeline-passed128.png");
+assert.equal(createdNotifications[1].options.buttons, undefined);
+assert.equal(sessionValues.pipelineNotificationContexts[createdNotifications[1].id].pipelineUrl, "");
+assert.equal(sessionValues.pendingFailedPipelineLabels.length, 0);
+
+const latePassedCommentResult = new Promise((resolve) => {
+  assert.equal(messageListener({
+    ...notificationMessage,
+    pipeline: {
+      ...notificationMessage.pipeline,
+      key: "note-102:updated",
+      status: "passed",
+      source: "comment",
+      runKey: "PR-pipeline_pytorch#102",
+      pipelineUrl: "https://www.openlibing.com/apps/pipelineDetail?pipelineId=102&pipelineRunId=passed"
+    }
+  }, {}, resolve), true);
+});
+assert.deepEqual(JSON.parse(JSON.stringify(await latePassedCommentResult)), {
+  ok: true,
+  pending: false,
+  skipped: true,
+  detailsFound: false
+});
+assert.equal(createdNotifications.length, 2);
+assert.equal(sessionValues.pendingPipelineComments?.length || 0, 0);
 
 const docsNotificationResult = new Promise((resolve) => {
   assert.equal(messageListener({
@@ -584,7 +711,8 @@ const docsNotificationResult = new Promise((resolve) => {
       ...notificationMessage.pipeline,
       key: "docs-103",
       kind: "docs",
-      status: "failed"
+      status: "failed",
+      pipelineUrl: ""
     }
   }, {}, resolve), true);
 });
@@ -592,6 +720,104 @@ assert.deepEqual(JSON.parse(JSON.stringify(await docsNotificationResult)), { ok:
 assert.equal(createdNotifications.length, 3);
 assert.match(createdNotifications[2].options.title, /文档流水线失败.*Ascend\/pytorch #123/);
 assert.equal(createdNotifications[2].options.iconUrl, "icons/pipeline-failed128.png");
+
+const noDetailsNotificationResult = new Promise((resolve) => {
+  assert.equal(messageListener({
+    ...notificationMessage,
+    pipeline: {
+      ...notificationMessage.pipeline,
+      key: "no-details-104",
+      project: "Ascend/cann",
+      iid: 456,
+      url: "https://gitcode.com/Ascend/cann/pull/456",
+      pipelineUrl: "https://example.com/apps/pipelineDetail"
+    }
+  }, {}, resolve), true);
+});
+assert.deepEqual(JSON.parse(JSON.stringify(await noDetailsNotificationResult)), {
+  ok: true,
+  pending: true,
+  skipped: false,
+  detailsFound: false
+});
+assert.equal(createdNotifications.length, 3);
+sessionValues.pendingFailedPipelineLabels[0].dueAt = Date.now() - 1;
+sessionValues.pipelineMonitors[0].active = false;
+pollingTimer.callback();
+await new Promise((resolve) => setImmediate(resolve));
+await new Promise((resolve) => setImmediate(resolve));
+assert.equal(createdNotifications.length, 4);
+assert.equal(createdNotifications[3].options.buttons, undefined);
+assert.equal(sessionValues.pipelineNotificationContexts[createdNotifications[3].id].pipelineUrl, "");
+notificationClickListener(createdNotifications[3].id);
+await new Promise((resolve) => setImmediate(resolve));
+await new Promise((resolve) => setImmediate(resolve));
+assert.equal(createdTabs.at(-1).url, "https://gitcode.com/Ascend/cann/pull/456");
+assert.equal(sessionValues.pipelineNotificationContexts[createdNotifications[3].id], undefined);
+
+const lateFailedCommentResult = new Promise((resolve) => {
+  assert.equal(messageListener({
+    ...notificationMessage,
+    pipeline: {
+      ...notificationMessage.pipeline,
+      key: "note-no-details-104:updated",
+      source: "comment",
+      runKey: "PR-pipeline_cann#104",
+      pipelineUrl: "https://www.openlibing.com/apps/pipelineDetail?pipelineId=104&pipelineRunId=late",
+      project: "Ascend/cann",
+      iid: 456,
+      url: "https://gitcode.com/Ascend/cann/pull/456"
+    }
+  }, {}, resolve), true);
+});
+assert.deepEqual(JSON.parse(JSON.stringify(await lateFailedCommentResult)), {
+  ok: true,
+  pending: false,
+  skipped: true,
+  detailsFound: false
+});
+assert.equal(createdNotifications.length, 4);
+assert.equal(sessionValues.pendingFailedPipelineLabels.some((item) => item.pipeline.iid === 456), false);
+
+const secondDetailsUrl = "https://www.openlibing.com/apps/pipelineDetail?pipelineId=105&pipelineRunId=failed";
+const secondFailedLabelResult = new Promise((resolve) => {
+  assert.equal(messageListener({
+    ...notificationMessage,
+    pipeline: {
+      ...notificationMessage.pipeline,
+      key: "details-105",
+      project: "Ascend/op-plugin",
+      iid: 789,
+      url: "https://gitcode.com/Ascend/op-plugin/merge_requests/789"
+    }
+  }, {}, resolve), true);
+});
+assert.equal((await secondFailedLabelResult).pending, true);
+const secondFailedCommentResult = new Promise((resolve) => {
+  assert.equal(messageListener({
+    ...notificationMessage,
+    pipeline: {
+      ...notificationMessage.pipeline,
+      key: "note-details-105:updated",
+      source: "comment",
+      runKey: "PR-pipeline_op-plugin#105",
+      pipelineUrl: secondDetailsUrl,
+      project: "Ascend/op-plugin",
+      iid: 789,
+      url: "https://gitcode.com/Ascend/op-plugin/merge_requests/789"
+    }
+  }, {}, resolve), true);
+});
+assert.equal((await secondFailedCommentResult).detailsFound, true);
+assert.equal(createdNotifications.length, 5);
+notificationButtonClickListener(createdNotifications[4].id, 0);
+await new Promise((resolve) => setImmediate(resolve));
+await new Promise((resolve) => setImmediate(resolve));
+assert.equal(createdTabs.at(-1).url, secondDetailsUrl);
+
+notificationClosedListener(createdNotifications[2].id);
+await new Promise((resolve) => setImmediate(resolve));
+assert.equal(sessionValues.pipelineNotificationContexts[createdNotifications[2].id], undefined);
 
 const commentFallbackMessage = {
   type: "notify-ci-pipeline",
@@ -610,7 +836,7 @@ const commentFallbackResult = new Promise((resolve) => {
   assert.equal(messageListener(commentFallbackMessage, {}, resolve), true);
 });
 assert.deepEqual(JSON.parse(JSON.stringify(await commentFallbackResult)), { ok: true, pending: true });
-assert.equal(createdNotifications.length, 3);
+assert.equal(createdNotifications.length, 5);
 assert.equal(sessionValues.pendingPipelineComments.length, 1);
 
 sessionValues.pendingPipelineComments[0].dueAt = Date.now() - 1;
@@ -618,8 +844,8 @@ sessionValues.pipelineMonitors[0].active = false;
 pollingTimer.callback();
 await new Promise((resolve) => setImmediate(resolve));
 await new Promise((resolve) => setImmediate(resolve));
-assert.equal(createdNotifications.length, 4);
-assert.match(createdNotifications[3].options.contextMessage, /机器人评论兜底/);
+assert.equal(createdNotifications.length, 6);
+assert.match(createdNotifications[5].options.contextMessage, /机器人评论兜底/);
 assert.equal(sessionValues.pendingPipelineComments.length, 0);
 
 const cancellableCommentResult = new Promise((resolve) => {
@@ -647,9 +873,14 @@ const cancellingLabelResult = new Promise((resolve) => {
     }
   }, {}, resolve), true);
 });
-assert.deepEqual(JSON.parse(JSON.stringify(await cancellingLabelResult)), { ok: true, pending: false, skipped: false });
+assert.deepEqual(JSON.parse(JSON.stringify(await cancellingLabelResult)), {
+  ok: true,
+  pending: false,
+  skipped: false,
+  detailsFound: false
+});
 assert.equal(sessionValues.pendingPipelineComments.length, 0);
-assert.equal(createdNotifications.length, 5);
+assert.equal(createdNotifications.length, 7);
 
 const activePageCommentResult = new Promise((resolve) => {
   assert.equal(messageListener({
@@ -657,7 +888,8 @@ const activePageCommentResult = new Promise((resolve) => {
     pipeline: {
       ...commentFallbackMessage.pipeline,
       key: "note-106:updated",
-      runKey: "PR-pipeline_pytorch#106"
+      runKey: "PR-pipeline_pytorch#106",
+      eventAt: 200000
     }
   }, {}, resolve), true);
 });
@@ -669,7 +901,7 @@ pollingTimer.callback();
 await new Promise((resolve) => setImmediate(resolve));
 await new Promise((resolve) => setImmediate(resolve));
 assert.equal(sessionValues.pendingPipelineComments.length, 0);
-assert.equal(createdNotifications.length, 5);
+assert.equal(createdNotifications.length, 7);
 
 const foregroundPendingResult = new Promise((resolve) => {
   assert.equal(messageListener({
@@ -677,7 +909,8 @@ const foregroundPendingResult = new Promise((resolve) => {
     pipeline: {
       ...commentFallbackMessage.pipeline,
       key: "note-107:updated",
-      runKey: "PR-pipeline_pytorch#107"
+      runKey: "PR-pipeline_pytorch#107",
+      eventAt: 300000
     }
   }, {}, resolve), true);
 });
@@ -701,6 +934,6 @@ assert.deepEqual(JSON.parse(JSON.stringify(await foregroundLabelResult)), {
   skipped: true
 });
 assert.equal(sessionValues.pendingPipelineComments.length, 0);
-assert.equal(createdNotifications.length, 5);
+assert.equal(createdNotifications.length, 7);
 
 console.log("Smoke tests passed");

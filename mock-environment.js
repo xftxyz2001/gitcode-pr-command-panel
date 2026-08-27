@@ -31,11 +31,28 @@
     },
     async addPipelineEvent(status) {
       sequence += 1;
+      const occurredAt = new Date().toISOString();
+      const runKey = `Mock-pipeline#${sequence}`;
+      const pipelineUrl = `https://www.openlibing.com/apps/pipelineDetail?pipelineId=mock-${sequence}&pipelineRunId=${status}`;
+      const noteBody = status === "failed"
+        ? `流水线 ${runKey} [ commitID：mock ] 运行失败 ${pipelineUrl}`
+        : `流水线 ${runKey} [ commitID：mock ] 已完成 <a href="${pipelineUrl}">查看详情</a><table><tr><td>流水线</td><td>${runKey}</td><td>&#9989;</td></tr></table>`;
       discussions = [{
-        id: `mock-${Date.now()}-${sequence}`,
+        id: `mock-label-${Date.now()}-${sequence}`,
         project,
         body: `add label ci-pipeline-${status}`,
-        action: "enterprise_label"
+        action: "enterprise_label",
+        created_at: occurredAt
+      }, {
+        id: `mock-note-${Date.now()}-${sequence}`,
+        notes: [{
+          id: `mock-note-item-${sequence}`,
+          project,
+          author: { username: "ascend-robot" },
+          created_at: occurredAt,
+          updated_at: occurredAt,
+          body: noteBody
+        }]
       }, ...discussions];
       await window.fetch(discussionsUrl);
     },
