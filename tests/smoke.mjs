@@ -9,6 +9,7 @@ const mockEnvironmentCode = fs.readFileSync(new URL("../mock-environment.js", im
 const contentCode = fs.readFileSync(new URL("../content.js", import.meta.url), "utf8");
 const optionsCode = fs.readFileSync(new URL("../options.js", import.meta.url), "utf8");
 const optionsHtml = fs.readFileSync(new URL("../options.html", import.meta.url), "utf8");
+const optionsCss = fs.readFileSync(new URL("../options.css", import.meta.url), "utf8");
 const manifest = JSON.parse(fs.readFileSync(new URL("../manifest.json", import.meta.url), "utf8"));
 
 const defaultsContext = { window: {} };
@@ -77,6 +78,7 @@ assert.match(optionsCode, /function renderPreviewButtons\(\)/);
 assert.match(optionsCode, /item\.enabled && item\.label && item\.command/);
 assert.doesNotMatch(optionsHtml, /禁用示例|背景遮罩强度/);
 assert.match(optionsHtml, /背景图片淡化程度/);
+assert.doesNotMatch(optionsCss, /\.preview-grid\s*\{[^}]*\b(?:max-height|overflow)\s*:/s);
 assert.match(contentCode, /changes\.appearance/);
 assert.match(contentCode, /image\.addEventListener\("error"/);
 
