@@ -7,7 +7,7 @@
 | 按钮 | 发送内容 |
 | --- | --- |
 | 编译 | `compile` |
-| 查看日志 | `get-log` |
+| 重试流水线 | `retry` |
 | LGTM | `/lgtm` |
 | 批准合入 | `/approve` |
 

@@ -19,7 +19,7 @@ const appearanceApi = defaultsContext.window.GITCODE_PR_APPEARANCE;
 assert.equal(defaults.length, 22);
 assert.deepEqual(
   JSON.parse(JSON.stringify(defaults.filter((item) => item.enabled).map((item) => item.command))),
-  ["compile", "get-log", "/lgtm", "/approve"]
+  ["compile", "retry", "/lgtm", "/approve"]
 );
 assert.equal(manifest.version, "1.6.0");
 assert.deepEqual(JSON.parse(JSON.stringify(appearanceApi.normalize())), {
